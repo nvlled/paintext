@@ -1,0 +1,36 @@
+body {
+    font-family: "monospace";
+}
+
+.canvas .row > *:hover {
+    background-color: #222;
+    color: white;
+    .letter-spacing: 0px;
+}
+
+.canvas .row > * {
+    background-color: #eee;
+    display: inline-block;
+    padding: 0px;
+    margin: 0px;
+    border: 0px;
+    .letter-spacing: 0px;
+}
+
+.canvas .row > .selected {
+    background-color: #222;
+    color: orange;
+}
+
+.canvas .row, .canvas .row > * {
+    cursor: default;
+}
+
+.canvas {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    font-size:25px;
+}
+
