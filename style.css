@@ -22,6 +22,11 @@ body {
     color: orange;
 }
 
+.canvas .row > .cursor {
+    background-color: #252;
+    color: orange;
+}
+
 .canvas .row, .canvas .row > * {
     cursor: default;
 }
@@ -34,3 +39,7 @@ body {
     font-size:25px;
 }
 
+button.btn.toggled {
+    background-color: #454;
+    color: white;
+}

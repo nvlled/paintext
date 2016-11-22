@@ -1,7 +1,10 @@
 var canvas;
 var isMouseDown = false;
 var cellStart = null;
-var lastCellLine = [];
+var cellEnd = null;
+var cellCursor = null;
+var lastSelectedCells = [];
+var selectionHandler = {};
 
 function repeat(x, n) {
     var xs = [];
@@ -34,13 +37,28 @@ function toggleClass(node, className) {
         node.classList.toggle(className);
 }
 
+function getCell(canvas, x, y) {
+    return canvas.children[y].children[x];
+}
+
+function clearLastSelectedCells() {
+    lastSelectedCells.forEach(function(cellEnd) {
+        removeClass(cellEnd, "selected");
+    });
+    if (cellStart)
+        removeClass(cellStart, "selected");
+    if (cellEnd)
+        removeClass(cellEnd, "selected");
+}
+
+function getCellCoord(cell) {
+    return {x: +cell.getAttribute("data-x"), y: +cell.getAttribute("data-y")};
+}
+
 // TODO: it's bwoke
 function getCellLine(canvas, startCell, endCell) {
-    function getCoord(cell) {
-        return {x: +cell.getAttribute("data-x"), y: +cell.getAttribute("data-y")};
-    }
-    var start = getCoord(startCell);
-    var end = getCoord(endCell);
+    var start = getCellCoord(startCell);
+    var end = getCellCoord(endCell);
     var v = {x: end.x-start.x, y: end.y-start.y};
     var len = Math.sqrt(v.x*v.x + v.y*v.y);
 
@@ -52,35 +70,142 @@ function getCellLine(canvas, startCell, endCell) {
     for (var t = 0; t < len; t++) {
         var x = Math.floor(start.x + (v.x * t));
         var y = Math.floor(start.y + (v.y * t));
-        var cell = canvas.children[y].children[x];
+        var cell = getCell(canvas, x, y);
         line.push(cell);
     }
     return line;
 }
 
+function setCursor(cell) {
+    if (cellCursor) {
+        removeClass(cellCursor, "cursor");
+    }
+    cellCursor = cell;
+    addClass(cellCursor, "cursor");
+}
+
+function getCellBlock(canvas, startCell, endCell) {
+    var p0 = getCellCoord(startCell);
+    var p1 = getCellCoord(endCell);
+    var cells = [];
+
+    var startX = Math.min(p0.x, p1.x);
+    var startY = Math.min(p0.y, p1.y);
+    var endX = Math.max(p0.x, p1.x);
+    var endY = Math.max(p0.y, p1.y);
+
+    for (var x = startX; x <= endX; x++) {
+        for (var y = startY; y <= endY; y++) {
+            var cell = getCell(canvas, x, y);
+            cells.push(cell);
+        }
+    }
+    return cells;
+}
+
+var selHandlers = {
+    line: {
+        onmousedown: function(e) {
+            isMouseDown = true;
+            clearLastSelectedCells();
+            cellStart = e.target;
+
+            toggleClass(cellStart, "selected");
+            setCursor(cellStart);
+
+        },
+        onmouseover: function(e) {
+            if (!isMouseDown)
+                return;
+
+            cellEnd = e.target;
+            clearLastSelectedCells();
+
+            var cells = getCellLine(canvas, cellStart, cellEnd);
+            cells.forEach(function(cell) {
+                addClass(cell, "selected");
+            });
+            lastSelectedCells = cells;
+        },
+        onmouseup: function() {
+            isMouseDown = false;
+        },
+    },
+
+    block: {
+        onmousedown: function(e) {
+            isMouseDown = true;
+            clearLastSelectedCells();
+            cellStart = e.target;
+
+            toggleClass(cellStart, "selected");
+            setCursor(cellStart);
+        },
+        onmouseover: function(e) {
+            if (!isMouseDown)
+                return;
+
+
+            cellEnd = e.target;
+            lastSelectedCells.forEach(function(cellEnd) {
+                removeClass(cellEnd, "selected");
+            });
+
+            var cells = getCellBlock(canvas, cellStart, cellEnd);
+            cells.forEach(function(cell) {
+                addClass(cell, "selected");
+            });
+            lastSelectedCells = cells;
+        },
+        onmouseup: function() {
+            isMouseDown = false;
+        },
+    },
+
+    serial: {
+        lastCell: null,
+        onmousedown: function(e) {
+            isMouseDown = true;
+            clearLastSelectedCells();
+            cellStart = e.target;
+
+            toggleClass(cellStart, "selected");
+            setCursor(cellStart);
+            this.lastCell = cellStart;
+        },
+        onmouseover: function(e) {
+            if (!isMouseDown)
+                return;
+            cellEnd = e.target;
+            var cells = [];
+            var p0 = getCellCoord(this.lastCell);
+            var p1 = getCellCoord(cellEnd);
+            cells = getCellLine(canvas, this.lastCell, cellEnd);
+            cells.forEach(function(cell) {
+                addClass(cell, "selected");
+            });
+            lastSelectedCells = lastSelectedCells.concat(cells);
+            this.lastCell = cellEnd;
+        },
+        onmouseup: function() {
+            isMouseDown = false;
+            this.lastCell = null;
+        },
+    },
+}
+
 function addHandlers(canvas, cell) {
     cell.onmousedown = function(e) {
-        isMouseDown = true;
-        toggleClass(cell, "selected");
-        cellStart = e.target;
+        if (selectionHandler)
+            selectionHandler.onmousedown(e);
     }
     cell.onmouseover = function(e) {
-        if (!isMouseDown)
-            return;
-
-        lastCellLine.forEach(function(cell) {
-            removeClass(cell, "selected");
-        });
-
-        var cellEnd = e.target;
-        var cells = getCellLine(canvas, cellStart, cellEnd);
-        cells.forEach(function(cell) {
-            addClass(cell, "selected");
-        });
-        lastCellLine = cells;
+        if (selectionHandler)
+            selectionHandler.onmouseover(e);
     }
-    cell.onmouseup = function() {
-        isMouseDown = false;
+    cell.onmouseup = function(e) {
+        if (selectionHandler)
+            selectionHandler.onmouseup(e);
     }
 }
 
@@ -109,9 +234,35 @@ function setContents(canvas, text, minw, minh, voidc) {
     });
 }
 
+function initButtonHandlers() {
+    var buttons = document.querySelectorAll(".select-btns > button");
+    function clearToggle() {
+        for (var i = 0; i < buttons.length; i++) {
+            removeClass(buttons[i], "toggled");
+        }
+    }
+    for (var i = 0; i < buttons.length; i++) {
+        (function(btn) {
+            btn.onclick = function() {
+                var fn = selHandlers[btn.name];
+                if (!fn)
+                    return;
+                selectionHandler = fn;
+                clearToggle();
+                addClass(btn, "toggled");
+            }
+        })(buttons[i]);
+    }
+}
+
 window.onload = function() {
+    initButtonHandlers();
+    selectionHandler = selHandlers["serial"];
+
     var cells = document.querySelectorAll(".canvas > .row > span");
     canvas = document.querySelector(".canvas");
     setContents(canvas, "testing 1 2 3 4\naaaaaaaaaa a a a a\nblah alalblb blahb\n123123", 80, 20);
 }
+
+
 
