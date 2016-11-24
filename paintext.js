@@ -55,7 +55,6 @@ function getCellCoord(cell) {
     return {x: +cell.getAttribute("data-x"), y: +cell.getAttribute("data-y")};
 }
 
-// TODO: it's bwoke
 function getCellLine(canvas, startCell, endCell) {
     var start = getCellCoord(startCell);
     var end = getCellCoord(endCell);
@@ -67,12 +66,26 @@ function getCellLine(canvas, startCell, endCell) {
     v.y /= len;
 
     var line = []
-    for (var t = 0; t < len; t++) {
-        var x = Math.floor(start.x + (v.x * t));
-        var y = Math.floor(start.y + (v.y * t));
+    for (var t = 0; t <= len; t++) {
+
+        var x;
+        var y;
+
+        // the check for negative values fixes diagonal lines
+        if (v.x < 0)
+            x = Math.ceil(start.x + (v.x * t));
+        else
+            x = Math.floor(start.x + (v.x * t));
+
+        if (v.y < 0)
+            y = Math.ceil(start.y + (v.y * t));
+        else
+            y = Math.floor(start.y + (v.y * t));
+
         var cell = getCell(canvas, x, y);
         line.push(cell);
     }
+    line.push(endCell);
     return line;
 }
 
